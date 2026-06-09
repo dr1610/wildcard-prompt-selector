@@ -1,2 +1,71 @@
-# wildcard-prompt-selector
-A Stable Diffusion WebUI extension that browses wildcard prompt candidates as searchable Extra Networks cards.
+﻿# Wildcard Prompt Selector
+
+Wildcard Prompt Selector is a Stable Diffusion WebUI Forge/ReForge/AUTOMATIC1111 extension that shows wildcard candidate lines as searchable Extra Networks cards.
+
+It reads wildcard files in read-only mode. Source wildcard files are not edited.
+
+## Quick Start
+
+1. Copy this folder into your WebUI `extensions` directory:
+
+```text
+stable-diffusion-webui/extensions/wildcard-prompt-selector
+```
+
+2. Restart WebUI.
+3. Open the Extra Networks area and select the `Wildcard Prompt Selector` tab.
+
+The package includes `sample_wildcards`, so the tab can open even when Dynamic Prompts is not installed yet.
+
+## First-Run Detection
+
+On startup, the extension tries to use a real wildcard folder when it is found next to this extension:
+
+```text
+extensions/sd-dynamic-prompts/wildcards
+extensions/stable-diffusion-webui-wildcards/wildcards
+extensions/wildcards
+```
+
+If one of those folders exists and `config.json` still points only to `sample_wildcards`, Wildcard Prompt Selector automatically uses the detected folder. If nothing is found, it falls back to the bundled samples.
+
+To force a custom folder, edit `config.json`:
+
+```json
+{
+  "wildcard_paths": [
+    "../sd-dynamic-prompts/wildcards"
+  ]
+}
+```
+
+Relative paths are resolved from the Wildcard Prompt Selector extension folder.
+
+## Behavior
+
+- Click a card to insert the wildcard candidate text directly into the prompt.
+- The extension inserts candidate text, not `__wildcard__` syntax.
+- `.txt`, `.yml`, and `.yaml` wildcard files are supported.
+- Use `max_cards` in `config.json` to limit startup load for very large wildcard libraries.
+- Optional preview images can be placed under `previews/`.
+
+## Files Written Locally
+
+The extension writes only inside its own folder:
+
+- `config.json`
+- `wildcard_prompt_selector_metadata.json`
+- `previews/`
+
+It does not modify Dynamic Prompts wildcard files or other extensions.
+
+## Troubleshooting
+
+If the tab still shows only samples after installing Dynamic Prompts, check `config.json`. If it contains a custom path, that custom setting is respected. Set it to your wildcard folder or delete `config.json` and restart WebUI to regenerate it.
+
+After updating the extension JavaScript, restart WebUI and hard-refresh the browser with `Ctrl + F5`.
+
+## License
+
+MIT License. See `LICENSE` for details.
+

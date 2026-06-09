@@ -1,0 +1,5 @@
+soft lighting
+rim light
+cinematic lighting
+backlighting
+warm sunlight
