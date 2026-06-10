@@ -228,3 +228,129 @@
   border-radius: 6px;
   background: rgba(0, 0, 0, 0.22);
 }
+
+/* v0.1 visibility pass: keep Wildcard Prompt Selector controls readable in dark reForge themes. */
+.vw-extra-toolbar {
+  padding: 10px;
+  border-color: rgba(148, 163, 184, 0.32);
+  background: #111827;
+}
+
+.vw-filter-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 84px minmax(180px, 280px) minmax(150px, 190px) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.vw-extra-toolbar input,
+.vw-extra-toolbar select,
+.vw-extra-toolbar details,
+.vw-extra-toolbar button {
+  box-sizing: border-box;
+  font: inherit;
+}
+
+.vw-local-search,
+.vw-search-mode,
+.vw-image-select {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.45) !important;
+  border-radius: 6px;
+  background: #0b1220 !important;
+  color: #e5eefc !important;
+  box-shadow: none !important;
+}
+
+.vw-local-search::placeholder {
+  color: #8fa3bd;
+}
+
+.vw-search-mode,
+.vw-image-select {
+  appearance: auto;
+  padding-right: 24px;
+}
+
+.vw-category-tree {
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  border-radius: 6px;
+  background: #0b1220;
+  color: #e5eefc;
+}
+
+.vw-category-tree summary {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 10px;
+  color: #e5eefc;
+  list-style-position: inside;
+}
+
+.vw-category-list {
+  padding: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.25);
+  background: #0f172a;
+}
+
+.vw-category-list button,
+.vw-tag-list button,
+.vw-clear-filter,
+.vw-card-tool {
+  border-color: rgba(148, 163, 184, 0.42);
+  background: #1f2937;
+  color: #edf4ff;
+}
+
+.vw-clear-filter {
+  min-width: 64px;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.vw-active-filter {
+  min-height: 18px;
+  color: #9fd1ff;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.vw-source-tree .tree-list-content {
+  min-height: 30px;
+  color: #e8f1ff;
+}
+
+.vw-source-tree .tree-list-item-label {
+  color: #f8fbff;
+  font-weight: 650;
+}
+
+.vw-source-tree .tree-list-content-file .tree-list-item-label {
+  font-weight: 500;
+}
+
+.vw-empty-state {
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border: 1px dashed rgba(148, 163, 184, 0.38);
+  border-radius: 6px;
+  color: #a9bdd6;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+@media (max-width: 900px) {
+  .vw-filter-row {
+    grid-template-columns: 1fr 84px;
+  }
+
+  .vw-category-tree,
+  .vw-image-select,
+  .vw-clear-filter {
+    grid-column: span 2;
+  }
+}
