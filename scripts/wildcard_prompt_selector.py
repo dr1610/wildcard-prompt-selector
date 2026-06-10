@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import hashlib
@@ -86,7 +86,7 @@ def load_json(path: Path, fallback: Any) -> Any:
     try:
         if not path.exists():
             return fallback
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception as exc:
         log(f"failed to load {path.name}: {exc}")
         return fallback
@@ -192,7 +192,7 @@ def make_item(relative_file: str, line_number: int, prompt: str, source_path: Pa
 def parse_txt_file(path: Path, relative_file: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     try:
-        for line_number, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), start=1):
+        for line_number, line in enumerate(path.read_text(encoding="utf-8-sig", errors="ignore").splitlines(), start=1):
             text = line.strip()
             if not text or text.startswith("#") or text.startswith("//"):
                 continue
@@ -223,7 +223,7 @@ def yaml_leaf_items(node: Any, path_parts: list[str], out: list[tuple[str, str]]
 def parse_yaml_file(path: Path, relative_file: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8", errors="ignore"))
+        data = yaml.safe_load(path.read_text(encoding="utf-8-sig", errors="ignore"))
         leaves: list[tuple[str, str]] = []
         yaml_leaf_items(data, [], leaves)
         for index, (path_hint, prompt) in enumerate(leaves, start=1):
@@ -270,7 +270,7 @@ def load_image_mapping() -> dict[str, str]:
         for mapping_name in IMAGE_MAPPING_NAMES:
             for path in PREVIEWS_DIR.rglob(mapping_name):
                 try:
-                    loaded = json.loads(path.read_text(encoding="utf-8"))
+                    loaded = json.loads(path.read_text(encoding="utf-8-sig"))
                 except Exception as exc:
                     log(f"failed to load image mapping {path}: {exc}")
                     continue
@@ -627,4 +627,5 @@ class Script(scripts.Script):
 
     def show(self, is_img2img):
         return False
+
 
