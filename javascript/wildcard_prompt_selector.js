@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   "use strict";
 
   const state = {
@@ -7,6 +7,8 @@
     image: "all",
     query: "",
     searchMode: "and",
+    scopePath: "",
+    scopeLabel: "",
   };
 
   function q(selector, root = document) {
@@ -18,7 +20,7 @@
   }
 
   function wildcardPromptSelectorPages() {
-    return qa("[id$='_wildcard_prompt_selector']").filter((page) => q(".vw-extra-card", page));
+    return qa("[id$='_wildcard_prompt_selector']");
   }
 
   function pageCards(page) {
@@ -31,7 +33,7 @@
   }
 
   function cardDescription(card) {
-    const desc = q(".description", card);
+    const desc = q(".vw-prompt-text", card) || q(".description", card);
     return desc ? desc.textContent.trim() : "";
   }
 
@@ -72,6 +74,118 @@
     ].join(" ").toLowerCase();
   }
 
+
+
+  function tabNameForPage(page) {
+    const match = page.id.match(/^(txt2img|img2img)_wildcard_prompt_selector$/);
+    return match ? match[1] : "txt2img";
+  }
+
+  function lazyCardContainer(page) {
+    let container = q(".vw-lazy-results", page);
+    if (container) return container;
+
+    const existing = qa(".extra-network-cards, .extra-network-cards-container, .card-list", page)
+      .find((node) => !node.closest(".vw-extra-toolbar") && !node.classList.contains("vw-source-tree"));
+    container = existing || document.createElement("div");
+    container.classList.add("vw-lazy-results");
+    if (!existing) {
+      const tree = q(".vw-source-tree", page);
+      const anchor = tree ? tree.parentElement : q(".vw-extra-toolbar", page);
+      if (anchor && anchor.parentElement) {
+        anchor.insertAdjacentElement("afterend", container);
+      } else {
+        page.appendChild(container);
+      }
+    }
+    return container;
+  }
+
+
+  async function loadTreeChildren(page, childList, content) {
+    if (childList.dataset.vwLoaded === "1") return;
+    const scope = normalizeScopePath(content.dataset.path || "");
+    const params = new URLSearchParams({ scope, tabname: tabNameForPage(page) });
+    const response = await fetch(`/wildcard-prompt-selector/tree?${params.toString()}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to load wildcard tree");
+    childList.innerHTML = data.html || "";
+    childList.dataset.vwLoaded = "1";
+  }
+  async function loadScopeItems(page) {
+    const container = lazyCardContainer(page);
+    const scope = normalizeScopePath(state.scopePath);
+    if (!scope) {
+      container.innerHTML = "";
+      applyFilters();
+      return;
+    }
+
+    container.dataset.vwLoadingScope = scope;
+    const active = q(".vw-active-filter", page);
+    if (active) active.textContent = `Loading ${state.scopeLabel || scope}...`;
+
+    const params = new URLSearchParams({ scope, tabname: tabNameForPage(page) });
+    const response = await fetch(`/wildcard-prompt-selector/items?${params.toString()}`);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Failed to load wildcard items");
+    if (container.dataset.vwLoadingScope !== scope) return;
+
+    container.innerHTML = data.html || "";
+    delete container.dataset.vwLoadingScope;
+    for (const card of pageCards(page)) card.dataset.vwBound = "";
+    bindCards();
+    applyFilters();
+  }
+  function normalizeScopePath(value) {
+    return String(value || "").replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  }
+
+  function clearExtraSearchForPage(page) {
+    const tabMatch = page.id.match(/^(txt2img|img2img)_wildcard_prompt_selector$/);
+    const tabname = tabMatch ? tabMatch[1] : "";
+    const explicitIds = tabname
+      ? [`${tabname}_wildcard_prompt_selector_extra_search`, `${tabname}_extra_search`]
+      : [];
+    const candidates = explicitIds
+      .map((id) => document.getElementById(id))
+      .filter(Boolean);
+
+    for (const input of qa("input")) {
+      const id = String(input.id || "").toLowerCase();
+      const placeholder = String(input.placeholder || "").toLowerCase();
+      if (input.classList.contains("vw-local-search")) continue;
+      if (id.includes("extra_search") || placeholder === "search") candidates.push(input);
+    }
+
+    for (const search of Array.from(new Set(candidates))) {
+      if (!search || search.classList.contains("vw-local-search")) continue;
+      if (search.value) {
+        search.value = "";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+        search.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+    }
+  }
+
+  function cardMatchesScope(card) {
+    const scope = normalizeScopePath(state.scopePath);
+    if (!scope) return false;
+    const source = normalizeScopePath(card.dataset.vwSource || "");
+    if (!source) return false;
+    if (scope.endsWith("/")) return source.startsWith(scope);
+    return source === scope || source.startsWith(`${scope}/`);
+  }
+
+  function setTreeScope(page, content) {
+    state.scopePath = normalizeScopePath(content.dataset.path || "");
+    state.scopeLabel = content.textContent.trim() || state.scopePath;
+    clearExtraSearchForPage(page);
+    loadScopeItems(page).catch((error) => {
+      const active = q(".vw-active-filter", page);
+      if (active) active.textContent = error.message || String(error);
+    });
+  }
   function wildcardPromptSelectorTreeClickGuard(event) {
     const content = event.target.closest(".vw-source-tree .tree-list-content-dir, .vw-source-tree .tree-list-content-file");
     if (!content) return;
@@ -85,24 +199,26 @@
     const item = content.closest(".tree-list-item");
     const childList = item ? item.querySelector(":scope > ul.tree-list--subgroup") : null;
     if (childList) {
-      childList.hidden = !childList.hidden;
-      content.classList.toggle("tree-list-content-dir-open", !childList.hidden);
+      const opening = childList.hidden;
+      childList.hidden = !opening;
+      content.classList.toggle("tree-list-content-dir-open", opening);
+      if (opening) {
+        loadTreeChildren(page, childList, content).catch((error) => {
+          const active = q(".vw-active-filter", page);
+          if (active) active.textContent = error.message || String(error);
+        });
+      }
+      setTreeScope(page, content);
+      return;
     }
 
-    const tabMatch = page.id.match(/^(txt2img|img2img)_wildcard_prompt_selector$/);
-    const tabname = tabMatch ? tabMatch[1] : "";
-    const search = tabname ? document.getElementById(`${tabname}_wildcard_prompt_selector_extra_search`) : null;
-    if (search) {
-      search.value = content.dataset.path || "";
-      search.dispatchEvent(new Event("input", { bubbles: true }));
-    }
+    setTreeScope(page, content);
   }
 
   function buildToolbar(page) {
     if (page.dataset.vwToolbarBound === "1") return;
     page.dataset.vwToolbarBound = "1";
     const cards = pageCards(page);
-    const categories = uniqueSorted(cards.map((card) => card.dataset.vwCategory || ""));
     const tags = uniqueSorted(
       cards.flatMap((card) =>
         (card.dataset.vwTags || "")
@@ -121,11 +237,7 @@
           <option value="and">AND</option>
           <option value="or">OR</option>
         </select>
-        <details class="vw-category-tree">
-          <summary>Category</summary>
-          <div class="vw-category-list"></div>
-        </details>
-        <select class="vw-image-select" title="Image filter">
+<select class="vw-image-select" title="Image filter">
           <option value="all">All images</option>
           <option value="with">Image only</option>
           <option value="without">No image</option>
@@ -135,21 +247,6 @@
       <div class="vw-active-filter"></div>
       <div class="vw-tag-list"></div>
     `;
-
-    const categoryList = q(".vw-category-list", toolbar);
-    const allButton = document.createElement("button");
-    allButton.type = "button";
-    allButton.textContent = "All";
-    allButton.dataset.category = "";
-    categoryList.appendChild(allButton);
-    for (const category of categories) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.textContent = category;
-      button.dataset.category = category;
-      button.style.paddingLeft = `${Math.min(category.split("/").length - 1, 5) * 14 + 8}px`;
-      categoryList.appendChild(button);
-    }
 
     const tagList = q(".vw-tag-list", toolbar);
     for (const tag of tags) {
@@ -161,12 +258,7 @@
     }
 
     toolbar.addEventListener("click", (event) => {
-      const categoryButton = event.target.closest("[data-category]");
       const tagButton = event.target.closest("[data-tag]");
-      if (categoryButton) {
-        state.category = categoryButton.dataset.category || "";
-        applyFilters();
-      }
       if (tagButton) {
         state.tag = tagButton.dataset.tag || "";
         applyFilters();
@@ -177,6 +269,8 @@
         state.image = "all";
         state.query = "";
         state.searchMode = "and";
+        state.scopePath = "";
+        state.scopeLabel = "";
         const imageSelect = q(".vw-image-select", toolbar);
         const search = q(".vw-local-search", toolbar);
         const mode = q(".vw-search-mode", toolbar);
@@ -213,11 +307,10 @@
       const cards = pageCards(page);
       const tokens = parseTokens(state.query);
       for (const card of cards) {
-        const category = card.dataset.vwCategory || "";
         const tags = (card.dataset.vwTags || "").split(",").map((tag) => tag.trim());
         const hasImage = card.dataset.vwHasImage === "1";
         const blob = cardSearchBlob(card);
-        const categoryMatch = !state.category || category === state.category || category.startsWith(`${state.category}/`);
+        const scopeMatch = cardMatchesScope(card);
         const tagMatch = !state.tag || tags.includes(state.tag);
         const imageMatch =
           state.image === "all" ||
@@ -228,18 +321,18 @@
           (state.searchMode === "or"
             ? tokens.some((token) => blob.includes(token))
             : tokens.every((token) => blob.includes(token)));
-        const show = categoryMatch && tagMatch && imageMatch && searchMatch;
+        const show = scopeMatch && tagMatch && imageMatch && searchMatch;
         card.classList.toggle("vw-filter-hidden", !show);
         if (show) visible += 1;
       }
       const active = q(".vw-active-filter", page);
       if (active) {
         const labels = [];
-        if (state.category) labels.push(`Category: ${state.category}`);
+        if (state.scopePath) labels.push(`Folder: ${state.scopeLabel || state.scopePath}`);
         if (state.tag) labels.push(`#${state.tag}`);
         if (state.image !== "all") labels.push(state.image === "with" ? "Image only" : "No image");
         if (state.query) labels.push(`${state.searchMode.toUpperCase()}: ${state.query}`);
-        active.textContent = `${visible} / ${cards.length} visible${labels.length ? " - " + labels.join(" / ") : ""}`;
+        active.textContent = `${visible} / ${cards.length} visible${labels.length ? " - " + labels.join(" / ") : " - Select a file"}`;
       }
     }
   }
@@ -435,5 +528,4 @@
   document.addEventListener("click", wildcardPromptSelectorTreeClickGuard, true);
   setInterval(bindCards, 1500);
 })();
-
 

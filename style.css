@@ -238,7 +238,7 @@
 
 .vw-filter-row {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) 84px minmax(180px, 280px) minmax(150px, 190px) auto;
+  grid-template-columns: minmax(240px, 1fr) 84px minmax(150px, 190px) auto;
   gap: 8px;
   align-items: center;
 }
@@ -348,9 +348,61 @@
     grid-template-columns: 1fr 84px;
   }
 
-  .vw-category-tree,
   .vw-image-select,
   .vw-clear-filter {
     grid-column: span 2;
   }
+}
+
+.vw-lazy-results {
+  min-height: 120px;
+}
+
+.vw-lazy-results:empty::before {
+  content: "Select a wildcard file";
+  display: grid;
+  place-items: center;
+  min-height: 120px;
+  border: 1px dashed rgba(148, 163, 184, 0.38);
+  border-radius: 6px;
+  color: #a9bdd6;
+  background: rgba(15, 23, 42, 0.6);
+}
+.vw-lazy-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.vw-prompt-card {
+  display: grid !important;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 6px;
+  min-height: 120px;
+  padding: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  background: #0b1220;
+  color: #e5eefc;
+}
+
+.vw-prompt-card .name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.vw-prompt-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+  color: #f8fbff;
+  font-size: 13px;
+}
+
+.vw-prompt-meta {
+  color: #9fd1ff;
+  font-size: 11px;
 }

@@ -20,7 +20,8 @@ from modules.scripts import basedir
 
 
 EXTENSION_NAME = "wildcard_prompt_selector"
-BASE_DIR = Path(basedir())
+BASE_DIR = Path(__file__).resolve().parents[1]
+WILDCARDS_DIR = BASE_DIR.parent / "sd-dynamic-prompts" / "wildcards"
 CONFIG_PATH = BASE_DIR / "config.json"
 METADATA_PATH = BASE_DIR / "wildcard_prompt_selector_metadata.json"
 PREVIEWS_DIR = BASE_DIR / "previews"
@@ -46,7 +47,7 @@ DEFAULT_CONFIG = {
     "avoid_duplicate_insert": True,
     "thumbnail_size": 160,
     "auto_insert_negative": False,
-    "max_cards": 20000,
+    "max_cards": 0,
 }
 
 
@@ -56,7 +57,7 @@ def log(message: str) -> None:
 
 def detect_wildcard_paths() -> list[str]:
     candidates = [
-        BASE_DIR.parent / "sd-dynamic-prompts" / "wildcards",
+        WILDCARDS_DIR,
         BASE_DIR.parent / "stable-diffusion-webui-wildcards" / "wildcards",
         BASE_DIR.parent / "wildcards",
     ]
@@ -121,7 +122,12 @@ def resolve_wildcard_path(raw_path: str) -> Path:
     path = Path(raw_path).expanduser()
     if path.is_absolute():
         return path
-    return (BASE_DIR / path).resolve()
+    resolved = (BASE_DIR / path).resolve()
+    if resolved.exists():
+        return resolved
+    if str(raw_path).replace("\\", "/").strip("/") in {"../sd-dynamic-prompts/wildcards", "sd-dynamic-prompts/wildcards"}:
+        return WILDCARDS_DIR.resolve()
+    return resolved
 
 
 def wildcard_files(paths: list[str]) -> list[Path]:
@@ -249,6 +255,93 @@ def load_wildcard_items(config: dict[str, Any]) -> list[dict[str, Any]]:
     return items
 
 
+
+
+def wildcard_source_files(config: dict[str, Any]) -> list[str]:
+    raw_paths = config.get("wildcard_paths", [])
+    if not isinstance(raw_paths, list):
+        raw_paths = []
+    roots = [str(path) for path in raw_paths]
+    return sorted({best_relative(path, roots) for path in wildcard_files(roots)}, key=shared.natural_sort_key)
+
+
+
+
+def wildcard_tree_entries(config: dict[str, Any], scope: str = "") -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    raw_paths = config.get("wildcard_paths", [])
+    if not isinstance(raw_paths, list):
+        raw_paths = []
+    scope = str(scope or "").replace("\\", "/").strip().lstrip("/")
+    dirs: dict[str, str] = {}
+    files: dict[str, str] = {}
+    for raw_root in [str(path) for path in raw_paths]:
+        root = resolve_wildcard_path(raw_root)
+        base = root / scope if scope else root
+        if not base.exists() or not base.is_dir():
+            continue
+        try:
+            for child in base.iterdir():
+                if child.is_dir():
+                    rel = child.relative_to(root).as_posix().rstrip("/") + "/"
+                    dirs[rel] = child.name
+                elif child.suffix.lower() in {".txt", ".yml", ".yaml"}:
+                    rel = child.relative_to(root).as_posix()
+                    files[rel] = child.name
+        except Exception as exc:
+            log(f"failed to scan wildcard tree {base}: {exc}")
+    sorted_dirs = sorted(dirs.items(), key=lambda pair: shared.natural_sort_key(pair[1]))
+    sorted_files = sorted(files.items(), key=lambda pair: shared.natural_sort_key(pair[1]))
+    return sorted_dirs, sorted_files
+def scope_matches_source(scope: str, source: str) -> bool:
+    scope = str(scope or "").replace("\\", "/").strip().lstrip("/")
+    source = str(source or "").replace("\\", "/").strip().lstrip("/")
+    if not scope:
+        return False
+    if scope.endswith("/"):
+        return source.startswith(scope)
+    return source == scope or source.startswith(f"{scope}/")
+
+
+def load_wildcard_items_for_scope(config: dict[str, Any], scope: str) -> list[dict[str, Any]]:
+    raw_paths = config.get("wildcard_paths", [])
+    if not isinstance(raw_paths, list):
+        raw_paths = []
+    roots = [str(path) for path in raw_paths]
+    scope = str(scope or "").replace("\\", "/").strip().lstrip("/")
+    if not scope:
+        return []
+
+    items: list[dict[str, Any]] = []
+    for raw_root in roots:
+        root = resolve_wildcard_path(raw_root)
+        target = (root / scope).resolve()
+        try:
+            target.relative_to(root.resolve())
+        except Exception:
+            continue
+
+        paths: list[Path] = []
+        if target.is_dir():
+            for suffix in ("*.txt", "*.yml", "*.yaml"):
+                paths.extend(sorted(target.rglob(suffix)))
+        elif target.is_file() and target.suffix.lower() in {".txt", ".yml", ".yaml"}:
+            paths.append(target)
+
+        for path in paths:
+            relative_file = best_relative(path, roots)
+            suffix = path.suffix.lower()
+            if suffix == ".txt":
+                items.extend(parse_txt_file(path, relative_file))
+            elif suffix in {".yml", ".yaml"}:
+                items.extend(parse_yaml_file(path, relative_file))
+    return items
+
+
+def merge_loaded_items(raw_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    metadata = load_metadata()
+    image_index = preview_image_index()
+    image_mapping = load_image_mapping()
+    return [merge_metadata(item, metadata, image_index, image_mapping) for item in raw_items]
 def preview_image_index() -> dict[str, str]:
     index: dict[str, str] = {}
     try:
@@ -358,15 +451,7 @@ def search_blob(item: dict[str, Any]) -> str:
 
 def load_wildcard_prompt_selector_cards() -> tuple[list[dict[str, Any]], dict[str, Any]]:
     config = load_config()
-    metadata = load_metadata()
-    image_index = preview_image_index()
-    image_mapping = load_image_mapping()
-    raw_items = load_wildcard_items(config)
-    max_cards = int(config.get("max_cards") or 0)
-    if max_cards > 0 and len(raw_items) > max_cards:
-        log(f"wildcard items capped: {max_cards}/{len(raw_items)}. Set max_cards to 0 for unlimited.")
-        raw_items = raw_items[:max_cards]
-    return [merge_metadata(item, metadata, image_index, image_mapping) for item in raw_items], config
+    return [], config
 
 
 def wildcard_prompt_selector_item_map() -> dict[str, dict[str, Any]]:
@@ -374,6 +459,19 @@ def wildcard_prompt_selector_item_map() -> dict[str, dict[str, Any]]:
     return {str(item["id"]): item for item in items}
 
 
+
+
+def wildcard_item_by_id(item_id: str) -> dict[str, Any] | None:
+    item_id = str(item_id or "")
+    if not item_id.startswith("wildcard:"):
+        return None
+    raw_path = item_id[len("wildcard:"):]
+    source = raw_path.rsplit(":", 1)[0] if ":" in raw_path else raw_path
+    config = load_config()
+    for item in merge_loaded_items(load_wildcard_items_for_scope(config, source)):
+        if str(item.get("id")) == item_id:
+            return item
+    return None
 def metadata_entry_for_save(payload: dict[str, Any], existing: dict[str, Any]) -> dict[str, Any]:
     entry = dict(existing) if isinstance(existing, dict) else {}
     for field in ["image", "display_name_override", "prepend_prompt", "append_prompt", "append_negative", "memo"]:
@@ -482,13 +580,10 @@ class ExtraNetworksPageVisualWildcard(ui_extra_networks.ExtraNetworksPage):
         rendered = rendered.replace('<div class="button-row">', f'<div class="button-row">{buttons}', 1)
         return rendered
 
-    def create_tree_view_html(self, tabname: str) -> str:
-        by_source: dict[str, list[dict[str, Any]]] = {}
-        for item in self.items.values():
-            source = str(item.get("vw_source") or "unknown.txt")
-            by_source.setdefault(source, []).append(item)
+    def create_tree_entries_html(self, tabname: str, scope: str = "") -> str:
+        dirs, files = wildcard_tree_entries(self._config, scope)
 
-        def tree_button(label: str, data_path: str, subclass: str, is_dir: bool = False) -> str:
+        def tree_button(label: str, data_path: str, subclass: str) -> str:
             return self.btn_tree_tpl.format(
                 **{
                     "search_terms": [data_path, label],
@@ -506,50 +601,29 @@ class ExtraNetworksPageVisualWildcard(ui_extra_networks.ExtraNetworksPage):
                 }
             )
 
-        folders: dict[str, set[str]] = {}
-        root_files: set[str] = set()
-        for source in by_source:
-            source_path = Path(source)
-            folder = source_path.parent.as_posix()
-            filename = source_path.name
-            if folder in ("", "."):
-                root_files.add(source)
-            else:
-                folders.setdefault(folder, set()).add(source)
-
         html_parts: list[str] = []
-        for folder, files in sorted(folders.items(), key=lambda pair: shared.natural_sort_key(pair[0])):
-            children = []
-            for source in sorted(files, key=shared.natural_sort_key):
-                filename = Path(source).name
-                children.append(
-                    "<li class='tree-list-item tree-list-item--subitem' data-tree-entry-type='file'>"
-                    f"{tree_button(filename, source, 'tree-list-content-file vw-source-file')}"
-                    "</li>"
-                )
-            parent = tree_button(folder, folder + "/", "tree-list-content-dir vw-source-folder", is_dir=True)
+        for data_path, label in dirs:
+            parent = tree_button(label, data_path, "tree-list-content-dir vw-source-folder")
             html_parts.append(
                 "<li class='tree-list-item tree-list-item--has-subitem' data-tree-entry-type='dir'>"
-                f"{parent}<ul class='tree-list tree-list--subgroup' hidden>{''.join(children)}</ul>"
+                f"{parent}<ul class='tree-list tree-list--subgroup' hidden></ul>"
                 "</li>"
             )
-
-        for source in sorted(root_files, key=shared.natural_sort_key):
+        for data_path, label in files:
             html_parts.append(
-                "<li class='tree-list-item' data-tree-entry-type='file'>"
-                f"{tree_button(source, source, 'tree-list-content-file vw-source-file')}"
+                "<li class='tree-list-item tree-list-item--subitem' data-tree-entry-type='file'>"
+                f"{tree_button(label, data_path, 'tree-list-content-file vw-source-file')}"
                 "</li>"
             )
-        return f"<ul class='tree-list tree-list--tree vw-source-tree'>{''.join(html_parts)}</ul>"
+        return "".join(html_parts)
+
+    def create_tree_view_html(self, tabname: str) -> str:
+        return f"<ul class='tree-list tree-list--tree vw-source-tree'>{self.create_tree_entries_html(tabname, '')}</ul>"
 
     def list_items(self):
-        try:
-            self._config = load_config()
-            items, _ = load_wildcard_prompt_selector_cards()
-            for index, item in enumerate(items):
-                yield self.create_item(item, index)
-        except Exception as exc:
-            log(f"Extra Networks list_items failed: {exc}")
+        self._config = load_config()
+        return
+        yield
 
     def allowed_directories_for_previews(self):
         return [str(PREVIEWS_DIR)]
@@ -571,10 +645,72 @@ def on_before_ui():
 script_callbacks.on_before_ui(on_before_ui)
 
 
+
+
+def render_prompt_card_html(item: dict[str, Any], config: dict[str, Any], index: int) -> str:
+    separator = str(config.get("append_separator", ", "))
+    prompt = compose_prompt(item, separator)
+    name = str(item.get("display_name_effective") or item.get("display_name") or prompt or item.get("id"))
+    source = str(item.get("source_file") or "")
+    line_number = str(item.get("line_number") or "")
+    category = str(item.get("category_path") or "Root")
+    tags = ",".join(str(tag) for tag in item.get("tags", []))
+    has_image = "1" if str(item.get("image") or "") else "0"
+    attrs = (
+        f'data-vw-id="{html.escape(str(item.get("id", "")), quote=True)}" '
+        f'data-vw-category="{html.escape(category, quote=True)}" '
+        f'data-vw-source="{html.escape(source, quote=True)}" '
+        f'data-vw-line="{html.escape(line_number, quote=True)}" '
+        f'data-vw-tags="{html.escape(tags, quote=True)}" '
+        f'data-vw-has-image="{has_image}" '
+        f'data-name="{html.escape(name, quote=True)}" '
+        f'data-sort-index="{index}"'
+    )
+    return (
+        f'<div class="card vw-extra-card vw-prompt-card" {attrs}>'
+        '<div class="button-row">'
+        '<button type="button" class="vw-card-tool vw-preview-button" title="Preview">View</button>'
+        '<button type="button" class="vw-card-tool vw-edit-button" title="Edit Wildcard Prompt Selector metadata">Edit</button>'
+        '</div>'
+        f'<div class="name">{html.escape(name)}</div>'
+        f'<div class="vw-prompt-text description">{html.escape(prompt)}</div>'
+        f'<div class="vw-prompt-meta">{html.escape(source)}: line {html.escape(line_number)}</div>'
+        '</div>'
+    )
+def render_items_html(scope: str, tabname: str) -> tuple[str, int]:
+    config = load_config()
+    raw_items = load_wildcard_items_for_scope(config, scope)
+    log(f"load scope {scope}: {len(raw_items)} items")
+    items = merge_loaded_items(raw_items)
+    html_parts = [render_prompt_card_html(item, config, index) for index, item in enumerate(items)]
+    return "".join(html_parts), len(items)
+
+
+
+def api_get_tree(request: Request):
+    try:
+        scope = request.query_params.get("scope", "")
+        tabname = request.query_params.get("tabname", "txt2img") or "txt2img"
+        page = ExtraNetworksPageVisualWildcard()
+        page._config = load_config()
+        html_text = page.create_tree_entries_html(tabname, scope)
+        return JSONResponse({"html": html_text, "scope": scope})
+    except Exception as exc:
+        log(f"api_get_tree failed: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+def api_get_items(request: Request):
+    try:
+        scope = request.query_params.get("scope", "")
+        tabname = request.query_params.get("tabname", "txt2img") or "txt2img"
+        html_text, count = render_items_html(scope, tabname)
+        return JSONResponse({"html": html_text, "count": count, "scope": scope})
+    except Exception as exc:
+        log(f"api_get_items failed: {exc}")
+        return JSONResponse({"error": str(exc)}, status_code=500)
 def api_get_item(request: Request):
     try:
         item_id = request.query_params.get("id", "")
-        item = wildcard_prompt_selector_item_map().get(item_id)
+        item = wildcard_item_by_id(item_id)
         if not item:
             return JSONResponse({"error": "Item not found"}, status_code=404)
         return JSONResponse({"item": item})
@@ -587,7 +723,7 @@ async def api_save_item(request: Request):
     try:
         payload = await request.json()
         item_id = str(payload.get("id") or "")
-        item = wildcard_prompt_selector_item_map().get(item_id)
+        item = wildcard_item_by_id(item_id)
         if not item:
             return JSONResponse({"error": "Item not found"}, status_code=404)
         metadata = load_metadata()
@@ -611,6 +747,8 @@ async def api_save_item(request: Request):
 
 def on_app_started(_demo, app):
     try:
+        app.add_api_route("/wildcard-prompt-selector/tree", api_get_tree, methods=["GET"])
+        app.add_api_route("/wildcard-prompt-selector/items", api_get_items, methods=["GET"])
         app.add_api_route("/wildcard-prompt-selector/item", api_get_item, methods=["GET"])
         app.add_api_route("/wildcard-prompt-selector/save", api_save_item, methods=["POST"])
         log("registered Wildcard Prompt Selector API routes")

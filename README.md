@@ -1,6 +1,6 @@
-﻿# Wildcard Prompt Selector
+# Wildcard Prompt Selector
 
-Wildcard Prompt Selector is a Stable Diffusion WebUI Forge/ReForge/AUTOMATIC1111 extension that shows wildcard candidate lines as searchable Extra Networks cards.
+Wildcard Prompt Selector is a Stable Diffusion WebUI Forge/ReForge/AUTOMATIC1111 extension that shows wildcard candidate lines as searchable Extra Networks cards. Large wildcard folders are loaded on demand from the left folder tree.
 
 It reads wildcard files in read-only mode. Source wildcard files are not edited.
 
@@ -46,7 +46,7 @@ Relative paths are resolved from the Wildcard Prompt Selector extension folder.
 - Click a card to insert the wildcard candidate text directly into the prompt.
 - The extension inserts candidate text, not `__wildcard__` syntax.
 - `.txt`, `.yml`, and `.yaml` wildcard files are supported.
-- Use `max_cards` in `config.json` to limit startup load for very large wildcard libraries.
+- Large wildcard libraries are loaded on demand from the left tree; `max_cards` defaults to `0`.
 - Optional preview images can be placed under `previews/`.
 
 ## Files Written Locally
