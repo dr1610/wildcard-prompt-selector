@@ -6,14 +6,46 @@ It reads wildcard files in read-only mode. Source wildcard files are not edited.
 
 ## Quick Start
 
-1. Copy this folder into your WebUI `extensions` directory:
+### Install From URL
+
+In WebUI / reForge, open **Extensions > Install from URL** and use:
 
 ```text
-stable-diffusion-webui/extensions/wildcard-prompt-selector
+URL for extension's git repository:
+https://github.com/dr1610/wildcard-prompt-selector
+
+Specific branch name:
+main
+
+Local directory name:
+wildcard_prompt_selector
 ```
 
-2. Restart WebUI.
-3. Open the Extra Networks area and select the `Wildcard Prompt Selector` tab.
+Then click **Install**, restart WebUI, and hard-refresh the browser with `Ctrl + F5`.
+
+If URL installation fails, the repository itself may still be fine. Common causes are that WebUI cannot find the `git` command, a folder with the same name already exists, or the local directory name was auto-detected incorrectly.
+
+### Install From ZIP
+
+If Git installation does not work:
+
+1. Open this repository on GitHub.
+2. Click **Code > Download ZIP**.
+3. Extract the ZIP.
+4. Rename the extracted folder to:
+
+```text
+wildcard_prompt_selector
+```
+
+5. Copy it into your WebUI `extensions` directory:
+
+```text
+stable-diffusion-webui/extensions/wildcard_prompt_selector
+```
+
+6. Restart WebUI.
+7. Open the Extra Networks area and select the `Wildcard Prompt Selector` tab.
 
 The package includes `sample_wildcards`, so the tab can open even when Dynamic Prompts is not installed yet.
 
